@@ -798,8 +798,11 @@ namespace Avalonia.Win32
 
                         // A window without a caption (i.e. None and BorderOnly decorations) maximizes to the whole screen
                         // by default. Adjust that to the screen's working area instead.
+                        // Skip this when the window is embedded in a non-desktop parent (SetParent): in that case
+                        // the default processing maximizes it to the parent's client area, which we must preserve.
                         var style = GetStyle();
                         if (!style.HasAllFlags(WindowStyles.WS_CAPTION | WindowStyles.WS_THICKFRAME) &&
+                            !HasNonDesktopParent() &&
                             Screen.ScreenFromHwnd(Hwnd, MONITOR.MONITOR_DEFAULTTONEAREST) is { } screen)
                         {
                             var maximizedRect = GetCaptionlessMaximizedRect(style, screen.WorkingArea);
@@ -847,9 +850,12 @@ namespace Avalonia.Win32
 
                         // A window without a caption (i.e. None and BorderOnly decorations) maximizes to the whole screen
                         // by default. Adjust that to the screen's working area instead.
+                        // Skip this when the window is embedded in a non-desktop parent (SetParent), so that the
+                        // parent's client area and the host's MoveWindow/SetWindowPos calls are respected.
                         if (!style.HasAllFlags(WindowStyles.WS_CAPTION | WindowStyles.WS_THICKFRAME) &&
                             style.HasAllFlags(WindowStyles.WS_MAXIMIZE) &&
                             !_isFullScreenActive &&
+                            !HasNonDesktopParent() &&
                             !flags.HasAllFlags(SetWindowPosFlags.SWP_NOMOVE | SetWindowPosFlags.SWP_NOSIZE))
                         {
                             GetWindowPlacement(Hwnd, out var placement);
@@ -1004,6 +1010,18 @@ namespace Avalonia.Win32
         /// <summary>
         /// Gets the expected maximized rect for a window without a caption.
         /// </summary>
+        /// <summary>
+        /// Returns true when this window has been reparented (e.g. via SetParent) into a window other than the desktop.
+        /// Unlike GetParent, GetAncestor(GA_PARENT) doesn't return the owner, so owned top-level windows aren't affected.
+        /// </summary>
+        private bool HasNonDesktopParent()
+        {
+            var parent = GetAncestor(Hwnd, GetAncestorFlags.GA_PARENT);
+
+            // For top-level windows GA_PARENT is the desktop window, whose own GA_PARENT is null.
+            return parent != IntPtr.Zero && GetAncestor(parent, GetAncestorFlags.GA_PARENT) != IntPtr.Zero;
+        }
+
         private PixelRect GetCaptionlessMaximizedRect(WindowStyles style, PixelRect workingArea)
         {
             var x = workingArea.X;
